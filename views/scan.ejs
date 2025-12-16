@@ -1,0 +1,262 @@
+<%- include('partials/header') %>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<script>
+    const tumOgrenciler = <%- JSON.stringify(ogrenciler) %>;
+</script>
+
+<div class="container text-center">
+    
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h4 class="mb-3">📷 Yoklama Ekranı</h4>
+
+            <div id="gps-status" class="alert alert-info py-2 small">
+                <i class="fa-solid fa-spinner fa-spin"></i> Konum bekleniyor...
+            </div>
+
+            <div id="reader" class="border rounded shadow-sm bg-dark" style="width: 100%;"></div>
+            
+            <div id="reader-file" style="display:none;"></div>
+
+            <hr>
+
+            <div class="d-grid gap-2">
+                <button class="btn btn-warning" onclick="dosyaSecimiAc()">
+                    <i class="fa-solid fa-image me-2"></i> Galeriden QR Yükle
+                </button>
+                
+                <input type="file" id="qr-input-file" accept="image/*" style="display: none;">
+
+                <button class="btn btn-outline-dark" onclick="manuelModalAc()">
+                    <i class="fa-solid fa-list-ul me-2"></i> Listeden Manuel Seç
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="islemModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="modalOgrenciAdi">Öğrenci Adı</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="modalKapat()"></button>
+      </div>
+      <div class="modal-body text-start">
+        
+        <input type="hidden" id="secilenTc">
+
+        <div class="mb-3">
+            <label class="fw-bold">Durum Seç:</label>
+            <div class="d-grid gap-2 d-md-block">
+                <input type="radio" class="btn-check" name="durum" id="d1" value="✅ Mevcut" checked>
+                <label class="btn btn-outline-success" for="d1">✅ Mevcut</label>
+
+                <input type="radio" class="btn-check" name="durum" id="d2" value="❌ Devamsız">
+                <label class="btn btn-outline-danger" for="d2">❌ Devamsız</label>
+
+                <input type="radio" class="btn-check" name="durum" id="d3" value="📄 Raporlu">
+                <label class="btn btn-outline-warning" for="d3">📄 Raporlu</label>
+
+                <input type="radio" class="btn-check" name="durum" id="d4" value="📅 İzinli">
+                <label class="btn btn-outline-info" for="d4">📅 İzinli</label>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="fw-bold">Notlar (Opsiyonel):</label>
+            <textarea id="notlar" class="form-control" rows="3" placeholder="Örn: Baret takmıyor, usta memnun, geç geldi..."></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="modalKapat()">İptal</button>
+        <button type="button" class="btn btn-primary" onclick="yoklamayiKaydet()">KAYDET</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="manuelModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Öğrenci Seç</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="manuelArama" class="form-control mb-2" placeholder="İsim ara..." onkeyup="listeyiFiltrele()">
+            
+            <select id="manuelSelect" class="form-select mb-3" size="10">
+                <% ogrenciler.forEach(ogr => { %>
+                    <option value="<%= ogr.tcNo %>"><%= ogr.adSoyad %> (<%= ogr.isletmeAdi %>)</option>
+                <% }) %>
+            </select>
+            <button class="btn btn-primary w-100" onclick="manuelSecimYap()">Seç ve İşlem Yap</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<audio id="bipSesi" src="https://media.geeksforgeeks.org/wp-content/uploads/20190531135120/beep.mp3"></audio>
+
+<script>
+    let userLocation = { lat: null, lng: null };
+    let taramaAktif = true;
+    let islemModal, manuelModal;
+    
+    // Dosya okumak için ayrı bir instance oluşturacağız
+    const html5QrCodeFile = new Html5Qrcode("reader-file");
+
+    document.addEventListener('DOMContentLoaded', function() {
+        islemModal = new bootstrap.Modal(document.getElementById('islemModal'));
+        manuelModal = new bootstrap.Modal(document.getElementById('manuelModal'));
+        
+        // --- DOSYA YÜKLEME DİNLEYİCİSİ ---
+        const fileInput = document.getElementById('qr-input-file');
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length == 0) return;
+            
+            const imageFile = e.target.files[0];
+            
+            // Dosyayı Tara
+            html5QrCodeFile.scanFile(imageFile, true)
+            .then(decodedText => {
+                // Başarılı okuma, normal kamera okuması gibi işlem yap
+                onScanSuccess(decodedText);
+                fileInput.value = ''; // Inputu temizle ki aynı dosyayı tekrar seçebilsin
+            })
+            .catch(err => {
+                alert(`QR Kod okunamadı! Lütfen net bir resim yükleyin.\nHata: ${err}`);
+                fileInput.value = '';
+            });
+        });
+    });
+
+    // Butona basınca gizli inputu aç
+    function dosyaSecimiAc() {
+        document.getElementById('qr-input-file').click();
+    }
+
+    // 1. KONUM AL
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                userLocation.lat = pos.coords.latitude;
+                userLocation.lng = pos.coords.longitude;
+                document.getElementById('gps-status').className = "alert alert-success py-1 small";
+                document.getElementById('gps-status').innerHTML = "<i class='fa-solid fa-check'></i> Konum Hazır";
+            },
+            () => { document.getElementById('gps-status').innerText = "Konum alınamadı!"; }
+        );
+    }
+
+    // 2. QR OKUNUNCA (Hem Kamera Hem Dosya Burayı Çağırır)
+    function onScanSuccess(decodedText) {
+        if (!taramaAktif) return;
+        
+        const ogrenci = tumOgrenciler.find(o => String(o.tcNo) === String(decodedText));
+        
+        if (ogrenci) {
+            taramaAktif = false;
+            document.getElementById('bipSesi').play();
+            
+            // Kamerayı duraklatmaya çalış (Hata verirse önemseme)
+            try { html5QrcodeScanner.pause(); } catch(e){} 
+            
+            modalAc(ogrenci);
+        } else {
+            alert("Bu QR Kod sistemde kayıtlı değil!");
+        }
+    }
+
+    // 3. MANUEL LİSTE FİLTRELEME (ARAMA)
+    function listeyiFiltrele() {
+        const input = document.getElementById('manuelArama');
+        const filter = input.value.toUpperCase();
+        const select = document.getElementById('manuelSelect');
+        const options = select.getElementsByTagName('option');
+
+        for (let i = 0; i < options.length; i++) {
+            const txtValue = options[i].textContent || options[i].innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                options[i].style.display = "";
+            } else {
+                options[i].style.display = "none";
+            }
+        }
+    }
+
+    function manuelModalAc() {
+        manuelModal.show();
+    }
+
+    function manuelSecimYap() {
+        const secilenTc = document.getElementById('manuelSelect').value;
+        const ogrenci = tumOgrenciler.find(o => String(o.tcNo) === String(secilenTc));
+        if(ogrenci) {
+            manuelModal.hide();
+            modalAc(ogrenci);
+        }
+    }
+
+    // 4. İŞLEM PENCERESİ
+    function modalAc(ogrenci) {
+        document.getElementById('modalOgrenciAdi').innerText = ogrenci.adSoyad;
+        document.getElementById('secilenTc').value = ogrenci.tcNo;
+        document.getElementById('notlar').value = "";
+        document.getElementById('d1').checked = true;
+        islemModal.show();
+    }
+
+    function modalKapat() {
+        islemModal.hide();
+        taramaAktif = true;
+        try { html5QrcodeScanner.resume(); } catch(e){}
+    }
+
+    function yoklamayiKaydet() {
+        const tc = document.getElementById('secilenTc').value;
+        const not = document.getElementById('notlar').value;
+        const durum = document.querySelector('input[name="durum"]:checked').value;
+
+        fetch('/yoklama-yap', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                tcNo: tc,
+                durum: durum,
+                notlar: not,
+                latitude: userLocation.lat,
+                longitude: userLocation.lng
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            // alert(data.mesaj); // Alert yerine modalı kapatıp devam edelim
+            modalKapat();
+            
+            // Ekrana ufak bir başarı bildirimi (Toast) yapalım ya da geçici bir div gösterelim
+            const gpsDiv = document.getElementById('gps-status');
+            const eskiHtml = gpsDiv.innerHTML;
+            const eskiClass = gpsDiv.className;
+            
+            gpsDiv.className = "alert alert-success py-2 small fw-bold";
+            gpsDiv.innerHTML = data.mesaj;
+            
+            setTimeout(() => {
+                gpsDiv.className = eskiClass;
+                gpsDiv.innerHTML = eskiHtml;
+            }, 3000);
+        });
+    }
+
+    // Kamerayı başlat
+    var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    html5QrcodeScanner.render(onScanSuccess);
+
+</script>
+
+<%- include('partials/footer') %>

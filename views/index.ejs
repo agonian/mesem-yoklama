@@ -1,0 +1,211 @@
+<%- include('partials/header') %>
+
+<% if (typeof msg != 'undefined' && msg) { %>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fa-solid fa-check-circle me-2"></i> <%= msg %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<% } %>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        
+        <div class="card mb-4 shadow-sm border-0">
+            <div class="card-header bg-success text-white">
+                <h5 class="m-0"><i class="fa-solid fa-user-plus me-2"></i>Öğrenci Ekle</h5>
+            </div>
+            <div class="card-body bg-light">
+                <form action="/ogrenci-ekle" method="POST">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted">Ad Soyad</label>
+                        <input type="text" name="adSoyad" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted">TC / Okul No</label>
+                        <input type="text" name="tcNo" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted">Telefon</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white text-muted fw-bold">+90</span>
+                            <input type="text" name="telefon" class="form-control" placeholder="5xxxxxxxxx">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">İşletme Adı</label>
+                        <input type="text" name="isletmeAdi" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 fw-bold">KAYDET</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-warning shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="m-0"><i class="fa-solid fa-file-excel me-2"></i>Toplu Yükle</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-light border small p-2 mb-2">
+                    <strong>Excel Başlıkları:</strong><br>
+                    <code>adSoyad</code>, <code>tcNo</code>, <code>isletmeAdi</code>, <code>telefon</code>
+                </div>
+                <form action="/toplu-yukle" method="POST" enctype="multipart/form-data">
+                    <input class="form-control mb-2" type="file" name="excelDosyasi" accept=".xlsx, .xls" required>
+                    <button type="submit" class="btn btn-warning w-100">Yükle</button>
+                </form>
+            </div>
+        </div>
+
+        <% if (ogrenciler.length > 0) { %>
+            <a href="/yoklama-al" class="btn btn-primary w-100 mt-4 py-3 shadow border-0">
+                <i class="fa-solid fa-camera fa-xl me-2"></i> KAMERAYI AÇ (YOKLAMA)
+            </a>
+        <% } else { %>
+            <button class="btn btn-secondary w-100 mt-4 py-3 shadow-sm border-0" disabled style="cursor: not-allowed; opacity: 0.7;">
+                <i class="fa-solid fa-ban fa-lg me-2"></i> LİSTE BOŞ
+                <div style="font-size: 11px; margin-top: 5px;">Yoklama almak için öğrenci ekleyin.</div>
+            </button>
+        <% } %>
+
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow border-0">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="m-0"><i class="fa-solid fa-users me-2"></i>Öğrenci Listesi</h5>
+                <span class="badge bg-secondary"><%= ogrenciler.length %> Kayıt</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center">QR & Paylaş</th>
+                                <th>Öğrenci Bilgileri</th>
+                                <th class="text-end">Yönetim</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% ogrenciler.forEach(ogrenci => { %>
+                                <tr>
+                                    <td style="width: 140px;">
+                                        <div class="text-center p-2 border rounded bg-white">
+                                            <img src="<%= ogrenci.qrData %>" width="70" height="70">
+                                            <div class="d-flex justify-content-center gap-1 mt-2">
+                                                <a href="<%= ogrenci.qrData %>" download="<%= ogrenci.adSoyad %>_QR.png" class="btn btn-sm btn-outline-primary" title="QR İndir">
+                                                    <i class="fa-solid fa-download"></i>
+                                                </a>
+                                                
+                                                <% if(ogrenci.telefon && ogrenci.telefon.length > 5) { %>
+                                                    <a href="https://wa.me/<%= ogrenci.telefon %>?text=Merhaba <%= ogrenci.adSoyad %>, MESEM yoklama için kullanacağın QR kodun ektedir. Lütfen işletmeye gittiğinde hazır bulundur." target="_blank" class="btn btn-sm btn-success" title="WhatsApp Paylaş">
+                                                        <i class="fa-brands fa-whatsapp"></i>
+                                                    </a>
+                                                <% } else { %>
+                                                    <button class="btn btn-sm btn-secondary" disabled title="Telefon Yok"><i class="fa-brands fa-whatsapp"></i></button>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <div class="fw-bold text-dark"><%= ogrenci.adSoyad %></div>
+                                        <div class="small text-muted mt-1">
+                                            <i class="fa-solid fa-id-card me-1"></i> <%= ogrenci.tcNo %>
+                                        </div>
+                                        <div class="small text-muted">
+                                            <i class="fa-solid fa-phone me-1"></i> <%= ogrenci.telefon ? "+" + ogrenci.telefon : "-" %>
+                                        </div>
+                                        <div class="mt-1">
+                                            <span class="badge bg-info text-dark"><i class="fa-solid fa-building me-1"></i><%= ogrenci.isletmeAdi %></span>
+                                        </div>
+                                    </td>
+
+                                    <td class="text-end">
+                                        <button onclick="duzenleModalAc('<%= ogrenci.id %>', '<%= ogrenci.adSoyad %>', '<%= ogrenci.tcNo %>', '<%= ogrenci.isletmeAdi %>', '<%= ogrenci.telefon %>')" 
+                                                class="btn btn-sm btn-warning text-dark mb-1">
+                                            <i class="fa-solid fa-pen"></i> Düzenle
+                                        </button>
+                                        <br>
+                                        <a href="/ogrenci-sil/<%= ogrenci.id %>" onclick="return confirm('Bu öğrenciyi ve tüm verilerini silmek istediğinize emin misiniz?')" class="btn btn-sm btn-danger">
+                                            <i class="fa-solid fa-trash"></i> Sil
+                                        </a>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+
+                    <% if (ogrenciler.length === 0) { %>
+                        <div class="text-center p-5 text-muted">
+                            <i class="fa-solid fa-folder-open fa-3x mb-3"></i>
+                            <p>Henüz sistemde kayıtlı öğrenci yok.</p>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title">✏️ Öğrenci Bilgilerini Düzenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form action="/ogrenci-guncelle" method="POST">
+            <input type="hidden" name="id" id="edit-id">
+            
+            <div class="mb-3">
+                <label class="form-label">Ad Soyad</label>
+                <input type="text" name="adSoyad" id="edit-ad" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">TC / Okul No</label>
+                <input type="text" name="tcNo" id="edit-tc" class="form-control" required>
+                <div class="form-text text-danger small">* TC değişirse QR kod yeniden üretilir.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Telefon</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light text-muted">+90</span>
+                    <input type="text" name="telefon" id="edit-tel" class="form-control">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">İşletme Adı</label>
+                <input type="text" name="isletmeAdi" id="edit-isletme" class="form-control">
+            </div>
+            
+            <div class="text-end">
+                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">İptal</button>
+                <button type="submit" class="btn btn-primary">Değişiklikleri Kaydet</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    function duzenleModalAc(id, ad, tc, isletme, tel) {
+        document.getElementById('edit-id').value = id;
+        document.getElementById('edit-ad').value = ad;
+        document.getElementById('edit-tc').value = tc;
+        document.getElementById('edit-isletme').value = isletme;
+        
+        // Telefon başındaki 90'ı görsel olarak silip kutuya koyalım (kullanıcı sadece numara görsün)
+        let gosterilecekTel = tel;
+        if(tel && tel.startsWith("90")) {
+            gosterilecekTel = tel.substring(2);
+        }
+        document.getElementById('edit-tel').value = gosterilecekTel;
+        
+        var myModal = new bootstrap.Modal(document.getElementById('editModal'));
+        myModal.show();
+    }
+</script>
+
+<%- include('partials/footer') %>
