@@ -9,6 +9,7 @@ const port = 3000;
 
 const DB_FILE = './data.json';
 const YOKLAMA_FILE = './yoklamalar.json';
+const ISLETME_FILE = './isletmeler.json';
 
 // --- AYARLAR ---
 app.set('view engine', 'ejs');
@@ -249,6 +250,142 @@ app.post('/rapor-guncelle', (req, res) => {
     }
     res.redirect('/raporlar');
 });
+// --- ÖDEME VE İŞLETME YÖNETİMİ ---
+
+// 1. ÖDEME SAYFASI (GET)
+app.get('/odemeler', (req, res) => {
+    const isletmeler = dosyaOku(ISLETME_FILE);
+    const ogrenciler = dosyaOku(DB_FILE); 
+    
+    // İşletmeleri isme göre sıralayalım
+    isletmeler.sort((a, b) => a.isletmeAdi.localeCompare(b.isletmeAdi));
+
+    res.render('odemeler', { 
+        isletmeler: isletmeler, 
+        odemeListesi: null, 
+        msg: req.query.msg,
+        ogrenciler: ogrenciler 
+    });
+});
+
+// 2. İŞLETME REHBERİ YÜKLEME (ID Eklendi)
+app.post('/isletme-yukle', upload.single('excelDosyasi'), (req, res) => {
+    if (!req.file) return res.send("Dosya yok!");
+    try {
+        const workbook = xlsx.readFile(req.file.path);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const data = xlsx.utils.sheet_to_json(sheet);
+        
+        let mevcutRehber = dosyaOku(ISLETME_FILE);
+        let eklenen = 0;
+
+        for (const row of data) {
+            if (row.isletmeAdi && row.telefon) {
+                // Aynı isimde varsa güncelle, yoksa ekle
+                const index = mevcutRehber.findIndex(r => r.isletmeAdi === row.isletmeAdi.trim());
+                if(index === -1) {
+                    mevcutRehber.push({
+                        id: Date.now() + Math.random(), // Düzenleme için ID şart
+                        isletmeAdi: row.isletmeAdi.trim(),
+                        telefon: telefonDuzelt(row.telefon)
+                    });
+                    eklenen++;
+                }
+            }
+        }
+        dosyaYaz(ISLETME_FILE, mevcutRehber);
+        fs.unlinkSync(req.file.path);
+        res.redirect('/odemeler?msg=' + eklenen + ' yeni işletme eklendi.');
+    } catch (err) { res.send("Hata: " + err.message); }
+});
+
+// 3. İŞLETME GÜNCELLEME (YENİ)
+app.post('/isletme-guncelle', (req, res) => {
+    const { id, isletmeAdi, telefon } = req.body;
+    let rehber = dosyaOku(ISLETME_FILE);
+    const index = rehber.findIndex(r => String(r.id) === String(id));
+    
+    if (index !== -1) {
+        rehber[index].isletmeAdi = isletmeAdi.trim();
+        rehber[index].telefon = telefonDuzelt(telefon);
+        dosyaYaz(ISLETME_FILE, rehber);
+    }
+    res.redirect('/odemeler?msg=İşletme bilgileri güncellendi.');
+});
+
+// 4. İŞLETME SİLME (YENİ)
+app.get('/isletme-sil/:id', (req, res) => {
+    let rehber = dosyaOku(ISLETME_FILE);
+    const yeniRehber = rehber.filter(r => String(r.id) !== req.params.id);
+    dosyaYaz(ISLETME_FILE, yeniRehber);
+    res.redirect('/odemeler?msg=İşletme silindi.');
+});
+
+// 5. AYLIK ÖDEME LİSTESİ (YUVARLAMA VE ÖRGÜN KATSAYISI EKLENDİ)
+app.post('/odeme-listesi-yukle', upload.single('excelDosyasi'), (req, res) => {
+    if (!req.file) return res.send("Dosya yok!");
+    
+    try {
+        const rehber = dosyaOku(ISLETME_FILE);
+        const ogrenciler = dosyaOku(DB_FILE); 
+        
+        const workbook = xlsx.readFile(req.file.path);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const hamVeri = xlsx.utils.sheet_to_json(sheet);
+        
+        let gruplanmisVeri = {}; 
+
+        hamVeri.forEach(row => {
+            if(!row.isletmeAdi) return;
+            const isletmeAdi = row.isletmeAdi.trim();
+            
+            if (!gruplanmisVeri[isletmeAdi]) {
+                const iletisim = rehber.find(r => r.isletmeAdi.toLowerCase() === isletmeAdi.toLowerCase());
+                gruplanmisVeri[isletmeAdi] = {
+                    id: iletisim ? iletisim.id : null, 
+                    telefon: iletisim ? iletisim.telefon : null,
+                    ogrenciler: [],
+                    toplamTutar: 0
+                };
+            }
+
+            // --- HESAPLAMA MANTIĞI ---
+            
+            // 1. Excel'den gelen ham ücreti al
+            let hamUcret = parseFloat(row.ucret) || 0;
+            
+            // 2. Önce yukarı yuvarla (İsteğin üzerine: 10683,92 -> 10684)
+            let islemUcreti = Math.ceil(hamUcret);
+
+            // 3. İsimde "(Örgün)" geçiyor mu kontrol et (Büyük/küçük harf duyarsız)
+            if (row.ogrenciAdi && row.ogrenciAdi.toLowerCase().includes('örgün')) {
+                // Varsa 1.5 ile çarp
+                islemUcreti = islemUcreti * 1.5;
+            }
+
+            // 4. Sonuç buçuklu çıkabilir (Örn: 101 * 1.5 = 151.5). 
+            // Para transferlerinde sorun olmaması için SONUCU DA yukarı yuvarlıyoruz.
+            let sonUcret = Math.ceil(islemUcreti);
+
+            gruplanmisVeri[isletmeAdi].ogrenciler.push({
+                ad: row.ogrenciAdi,
+                ucret: sonUcret
+            });
+            gruplanmisVeri[isletmeAdi].toplamTutar += sonUcret;
+        });
+
+        fs.unlinkSync(req.file.path);
+        
+        res.render('odemeler', { 
+            isletmeler: rehber, 
+            odemeListesi: gruplanmisVeri,
+            msg: "Ödemeler hesaplandı (Örgün öğrencilere 1.5 katsayı uygulandı).",
+            ogrenciler: ogrenciler 
+        });
+
+    } catch (err) { res.send("Hata: " + err.message); }
+});
+
 
 app.listen(port, () => {
     console.log(`-------------------------------------------`);
