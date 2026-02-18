@@ -1,0 +1,207 @@
+<%- include('partials/header') %>
+
+<div class="container pb-5">
+    
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div class="d-flex align-items-center">
+            <a href="/" class="btn btn-light border me-3"><i class="fa-solid fa-arrow-left"></i></a>
+            <div>
+                <h5 class="m-0 fw-bold"><%= isletmeAdi %></h5>
+                <small class="text-muted">Toplu Yoklama Ekranı</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-body bg-light d-flex align-items-center gap-3">
+            <div class="fw-bold text-primary"><i class="fa-regular fa-calendar-days me-2"></i>Yoklama Tarihi:</div>
+            <input type="date" id="secilenTarih" class="form-control" style="max-width: 200px; font-weight: bold;">
+            <div class="small text-muted ms-2">(Geçmişe veya geleceğe dönük işlem yapabilirsiniz)</div>
+        </div>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Öğrenci Bilgisi</th>
+                            <th class="text-center">Durum</th>
+                            <th>Not / Açıklama</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% ogrenciler.forEach((ogr, index) => { %>
+                            <tr class="ogrenci-satir" data-id="<%= ogr.id %>" data-ad="<%= ogr.adSoyad %>" data-tc="<%= ogr.tcNo %>">
+                                <td>
+                                    <div class="fw-bold"><%= ogr.adSoyad %></div>
+                                    <div class="small text-muted"><%= ogr.alanDal || "Alan Yok" %></div>
+                                </td>
+                                <td class="text-center" style="min-width: 220px;">
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="mevcut_<%= index %>" value="✅ Mevcut" checked>
+                                        <label class="btn btn-outline-success btn-sm" for="mevcut_<%= index %>">Var</label>
+
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="devamsiz_<%= index %>" value="❌ Devamsız">
+                                        <label class="btn btn-outline-danger btn-sm" for="devamsiz_<%= index %>">Yok</label>
+
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="izinli_<%= index %>" value="📅 İzinli">
+                                        <label class="btn btn-outline-warning btn-sm" for="izinli_<%= index %>">İzin</label>
+                                        
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="raporlu_<%= index %>" value="Raporlu">
+                                        <label class="btn btn-outline-secondary btn-sm" for="raporlu_<%= index %>">Rap</label>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm not-input" placeholder="Not giriniz...">
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card-footer bg-white p-3">
+            <button onclick="yoklamayiTamamla()" class="btn btn-primary w-100 py-2 fw-bold">
+                <i class="fa-solid fa-save me-2"></i>SEÇİLEN TARİHE KAYDET
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Sayfa Yüklendiğinde
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Tarihi Bugüne Ayarla
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const bugunFormatli = `${yyyy}-${mm}-${dd}`;
+        
+        const tarihInput = document.getElementById('secilenTarih');
+        tarihInput.value = bugunFormatli;
+
+        // 2. Sayfa ilk açıldığında da bugünün verisi var mı diye kontrol et
+        verileriGetirVeDoldur(bugunFormatli);
+
+        // 3. Tarih değiştiğinde tetiklensin
+        tarihInput.addEventListener('change', function() {
+            verileriGetirVeDoldur(this.value);
+        });
+    });
+
+    // --- YENİ: GEÇMİŞ VERİYİ ÇEKME FONKSİYONU ---
+    function verileriGetirVeDoldur(tarih) {
+        if (!tarih) return;
+
+        // Kullanıcıya işlem yapıldığını hissettirebiliriz (Opsiyonel: Opaklık düşür)
+        document.querySelector('tbody').style.opacity = '0.5';
+
+        fetch(`/get-yoklama-durumu?isletmeAdi=<%= encodeURIComponent(isletmeAdi) %>&tarih=${tarih}`)
+        .then(res => res.json())
+        .then(data => {
+            document.querySelector('tbody').style.opacity = '1'; // Normale dön
+            
+            if (data.success) {
+                const kayitlar = data.kayitlar; // { "TCNO": {durum: "...", not: "..."} }
+
+                // Tüm satırları gez
+                document.querySelectorAll('.ogrenci-satir').forEach((satir, index) => {
+                    const tc = satir.getAttribute('data-tc');
+                    const kayit = kayitlar[tc]; // Bu TC için kayıt var mı?
+
+                    // Radyo butonlarını ve Not alanını seç
+                    const radyolar = document.getElementsByName(`durum_${index}`);
+                    const notInput = satir.querySelector('.not-input');
+
+                    if (kayit) {
+                        // --- KAYIT VARSA: Ona göre doldur ---
+                        notInput.value = kayit.not || "";
+                        
+                        // İlgili durumu işaretle
+                        for (let radyo of radyolar) {
+                            if (radyo.value === kayit.durum) {
+                                radyo.checked = true;
+                            }
+                        }
+                    } else {
+                        // --- KAYIT YOKSA: Sıfırla (Varsayılan: Var) ---
+                        notInput.value = "";
+                        // "Mevcut" olanı (value="✅ Mevcut" olanı) işaretle
+                        // Not: Senin kodunda value="✅ Mevcut" idi, ona göre:
+                        for (let radyo of radyolar) {
+                            if (radyo.value.includes('Mevcut')) {
+                                radyo.checked = true;
+                            }
+                        }
+                    }
+                });
+            }
+        })
+        .catch(err => {
+            console.error("Veri çekme hatası:", err);
+            document.querySelector('tbody').style.opacity = '1';
+        });
+    }
+
+    // --- KAYDETME FONKSİYONU (Aynen kalıyor) ---
+    function yoklamayiTamamla() {
+        const tarihInput = document.getElementById('secilenTarih').value;
+        if (!tarihInput) { alert("Lütfen tarih seçiniz!"); return; }
+
+        if(!confirm(tarihInput + " tarihi için yoklama kaydedilecek/güncellenecek. Onaylıyor musunuz?")) return;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => verileriGonder(pos.coords.latitude, pos.coords.longitude, tarihInput),
+                () => verileriGonder(null, null, tarihInput)
+            );
+        } else {
+            verileriGonder(null, null, tarihInput);
+        }
+    }
+
+    function verileriGonder(lat, lon, tarihSecimi) {
+        let yoklamaListesi = [];
+        
+        document.querySelectorAll('.ogrenci-satir').forEach((satir, index) => {
+            const ad = satir.getAttribute('data-ad');
+            const tc = satir.getAttribute('data-tc');
+            const seciliDurum = document.querySelector(`input[name="durum_${index}"]:checked`).value;
+            const not = satir.querySelector('.not-input').value;
+
+            yoklamaListesi.push({
+                adSoyad: ad,
+                tcNo: tc,
+                durum: seciliDurum,
+                not: not
+            });
+        });
+
+        fetch('/isletme-yoklama-kaydet', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                isletmeAdi: "<%= isletmeAdi %>",
+                latitude: lat,
+                longitude: lon,
+                secilenTarih: tarihSecimi,
+                yoklamalar: yoklamaListesi
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                alert(data.mesaj);
+                window.location.href = '/'; 
+            } else {
+                alert("Hata: " + data.mesaj);
+            }
+        });
+    }
+</script>
+
+<%- include('partials/footer') %>

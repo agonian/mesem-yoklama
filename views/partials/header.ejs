@@ -22,23 +22,30 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item"><a class="nav-link" href="/"><i class="fa-solid fa-users me-1"></i>Öğrenciler</a></li>
-        <li class="nav-item"><a class="nav-link" href="/odemeler"><i class="fa-solid fa-wallet me-1"></i>Ödemeler</a></li>
-        <% if (ogrenciler.length > 0) { %>
-           <li class="nav-item"><a class="nav-link" href="/yoklama-al"><i class="fa-solid fa-qrcode me-1"></i>Yoklama Al</a></li>
-        <% } else { %>
-            <li class="nav-item"><a class="nav-link" style="pointer-events: none;" href="/yoklama-al"><i class="fa-solid fa-qrcode me-1"></i>Yoklama Al</a></li>
-        <% } %>
-        
-        <% if (ogrenciler.length > 0) { %>
-           <li class="nav-item"><a class="nav-link" href="/raporlar"><i class="fa-solid fa-file-excel me-1"></i>Raporlar</a></li>
-        <% } else { %>
-            <li class="nav-item"><a class="nav-link" style="pointer-events: none;" href="/raporlar"><i class="fa-solid fa-file-excel me-1"></i>Raporlar</a></li>
-        <% } %>     
-        
-        
-      </ul>
+  <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
+    <li class="nav-item"><a class="nav-link" href="/"><i class="fa-solid fa-briefcase me-1"></i>İşletmeler / Anasayfa</a></li>
+    <li class="nav-item"><a class="nav-link" href="/odemeler"><i class="fa-solid fa-wallet me-1"></i>Ödemeler</a></li>
+    <li class="nav-item"><a class="nav-link" href="/raporlar"><i class="fa-solid fa-chart-pie me-1"></i>Raporlar</a></li>
+    
+    <% if (typeof aktifKullanici !== 'undefined' && aktifKullanici === 'yusuf.yilmz@gmail.com') { %>
+        <li class="nav-item ms-lg-2">
+            <a class="nav-link text-warning fw-bold border border-warning rounded px-2" href="/admin">
+                <i class="fa-solid fa-crown me-1"></i>Admin Paneli
+            </a>
+        </li>
+    <% } %>
+
+    <% if (typeof aktifKullanici !== 'undefined') { %>
+        <li class="nav-item ms-lg-4 d-flex align-items-center mt-2 mt-lg-0 border-start-lg ps-lg-3">
+            <span class="navbar-text fw-bold text-white me-3 lh-1">
+                <i class="fa-solid fa-user-circle me-1"></i> <%= aktifKullanici %>
+            </span>
+            <a class="btn btn-sm btn-light text-danger fw-bold border-0 shadow-sm" href="/logout">
+                <i class="fa-solid fa-power-off me-1"></i>Çıkış Yap
+            </a>
+        </li>
+    <% } %>
+</ul>
     </div>
   </div>
 </nav>

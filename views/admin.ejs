@@ -1,0 +1,125 @@
+<%- include('partials/header') %>
+
+<div class="container pb-5">
+    <% if (typeof msg != 'undefined' && msg) { %>
+        <div class="alert <%= msg.includes('Hata') ? 'alert-danger' : 'alert-success' %> alert-dismissible fade show shadow-sm">
+            <i class="fa-solid <%= msg.includes('Hata') ? 'fa-triangle-exclamation' : 'fa-check-circle' %> me-2"></i> <%= msg %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    <% } %>
+
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-8">
+            <h3 class="fw-bold text-dark mb-0"><i class="fa-solid fa-crown text-warning me-2"></i>Sistem Yönetimi</h3>
+        </div>
+    </div>
+
+    <div class="card shadow border-success mb-4">
+        <div class="card-header bg-success text-white">
+            <h6 class="m-0"><i class="fa-solid fa-wand-magic-sparkles me-2"></i>Sihirli MEB Listesi Yükle (Toplu Kurulum)</h6>
+        </div>
+        <div class="card-body bg-light">
+            <p class="small text-muted mb-3">
+                MEB'den aldığınız büyük listeyi doğrudan buraya yükleyin. Sistem <b>Öğretmen</b> sütununu okur; öğretmen yoksa hesabını ve şifresini oluşturur, ilgili öğrencileri o öğretmenin profiline otomatik tanımlar.
+            </p>
+            <form action="/admin/meb-excel-yukle" method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+                <input type="file" name="excelDosyasi" class="form-control w-50" required>
+                <button type="submit" class="btn btn-success fw-bold"><i class="fa-solid fa-gears me-2"></i>Sistemi Otomatik Kur</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="m-0"><i class="fa-solid fa-user-plus me-2"></i>Tekli Ekle</h6>
+                </div>
+                <div class="card-body">
+                    <form action="/admin/ogretmen-ekle" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Öğretmen Adı</label>
+                            <input type="text" name="isim" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">E-Posta</label>
+                            <input type="email" name="email" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-muted">Şifre</label>
+                            <input type="text" name="password" class="form-control form-control-sm" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold">Hesap Aç</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card shadow border-0 h-100">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h6 class="m-0"><i class="fa-solid fa-users-gear me-2"></i>Kayıtlı Öğretmenler ve Şifreler</h6>
+                    <span class="badge bg-light text-dark"><%= ogretmenler.length %> Kişi</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Öğretmen Adı</th>
+                                    <th>Sisteme Giriş E-Postası</th>
+                                    <th>Geçici Şifresi</th>
+                                    <th class="text-end">Manuel Yükle</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (ogretmenler.length === 0) { %>
+                                    <tr><td colspan="4" class="text-center p-4 text-muted">Sistemde öğretmen bulunmuyor.</td></tr>
+                                <% } %>
+                                
+                                <% ogretmenler.forEach(ogr => { %>
+                                    <tr>
+                                        <td class="fw-bold"><i class="fa-solid fa-user-tie text-secondary me-2"></i><%= ogr.isim %></td>
+                                        <td><span class="badge bg-secondary"><%= ogr.email %></span></td>
+                                        
+                                        <td><span class="font-monospace text-danger fw-bold"><%= ogr.sifre %></span></td>
+                                        
+                                        <td class="text-end">
+                                            <form action="/admin/ogrenci-yukle" method="POST" enctype="multipart/form-data" class="d-flex justify-content-end gap-1">
+                                                <input type="hidden" name="ogretmenUid" value="<%= ogr.uid %>">
+                                                <input type="file" name="excelDosyasi" class="form-control form-control-sm" style="width: 150px;" required>
+                                                <button type="submit" class="btn btn-sm btn-outline-dark"><i class="fa-solid fa-upload"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow border-danger mt-5">
+        <div class="card-header bg-danger text-white">
+            <h6 class="m-0"><i class="fa-solid fa-triangle-exclamation me-2"></i>Tehlikeli Bölge</h6>
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="fw-bold text-danger">Veritabanını Sıfırla</h6>
+                    <p class="small text-muted mb-0">Tüm öğrencileri, işletmeleri ve geçmiş yoklamaları kalıcı olarak siler. Öğretmen hesapları silinmez.</p>
+                </div>
+                <form action="/admin/sifirla" method="POST" onsubmit="return confirm('DİKKAT! Tüm öğrenci ve yoklama verileri silinecek. Bu işlem geri alınamaz! Emin misiniz?');">
+                    <button type="submit" class="btn btn-outline-danger fw-bold">
+                        <i class="fa-solid fa-trash me-2"></i>Tüm Verileri Sil
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<%- include('partials/footer') %>

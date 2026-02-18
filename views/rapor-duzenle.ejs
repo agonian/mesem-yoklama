@@ -1,0 +1,104 @@
+<%- include('partials/header') %>
+
+<div class="container pb-5">
+    
+    <div class="d-flex align-items-center mb-4">
+        <a href="/raporlar" class="btn btn-light border me-3"><i class="fa-solid fa-arrow-left"></i></a>
+        <div>
+            <h5 class="m-0 fw-bold">Yoklama Düzenle: <%= isletmeAdi %></h5>
+            <small class="text-muted"><i class="fa-regular fa-clock me-1"></i><%= tarih %></small>
+        </div>
+    </div>
+
+    <div class="card shadow border-0 border-top border-4 border-warning">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Öğrenci Bilgisi</th>
+                            <th class="text-center">Durum</th>
+                            <th>Not / Açıklama</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% ogrenciler.forEach((ogr, index) => { %>
+                            <tr class="ogrenci-satir" data-ad="<%= ogr.adSoyad %>" data-tc="<%= ogr.tcNo %>">
+                                <td>
+                                    <div class="fw-bold"><%= ogr.adSoyad %></div>
+                                    <div class="small text-muted"><%= ogr.alanDal || "Alan Yok" %></div>
+                                </td>
+                                <td class="text-center" style="min-width: 220px;">
+                                    <div class="btn-group w-100" role="group">
+                                        <% let d = ogr.gecmisDurum; %>
+                                        
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="mevcut_<%= index %>" value="✅ Mevcut" <%= (d == '✅ Mevcut' || !d) ? 'checked' : '' %>>
+                                        <label class="btn btn-outline-success btn-sm" for="mevcut_<%= index %>">Var</label>
+
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="devamsiz_<%= index %>" value="❌ Devamsız" <%= d == '❌ Devamsız' ? 'checked' : '' %>>
+                                        <label class="btn btn-outline-danger btn-sm" for="devamsiz_<%= index %>">Yok</label>
+
+                                        <input type="radio" class="btn-check" name="durum_<%= index %>" id="izinli_<%= index %>" value="📅 İzinli" <%= d == '📅 İzinli' ? 'checked' : '' %>>
+                                        <label class="btn btn-outline-warning btn-sm" for="izinli_<%= index %>">İzin</label>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm not-input" value="<%= ogr.gecmisNot || '' %>" placeholder="Not giriniz...">
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card-footer bg-white p-3">
+            <button onclick="guncellemeyiKaydet()" class="btn btn-warning w-100 py-2 fw-bold text-dark">
+                <i class="fa-solid fa-save me-2"></i>DEĞİŞİKLİKLERİ KAYDET
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function guncellemeyiKaydet() {
+        if(!confirm("Bu yoklama kaydı güncellenecek. Onaylıyor musunuz?")) return;
+
+        let yoklamaListesi = [];
+        
+        document.querySelectorAll('.ogrenci-satir').forEach((satir, index) => {
+            const ad = satir.getAttribute('data-ad');
+            const tc = satir.getAttribute('data-tc');
+            const seciliDurum = document.querySelector(`input[name="durum_${index}"]:checked`).value;
+            const not = satir.querySelector('.not-input').value;
+
+            yoklamaListesi.push({
+                adSoyad: ad,
+                tcNo: tc,
+                durum: seciliDurum,
+                not: not
+            });
+        });
+
+        fetch('/rapor-guncelle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                isletmeAdi: "<%= isletmeAdi %>", // Tırnaklara dikkat
+                tarih: "<%= tarih %>",           // Tırnaklara dikkat
+                yoklamalar: yoklamaListesi
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                alert(data.mesaj);
+                window.location.href = '/raporlar';
+            } else {
+                alert(data.mesaj);
+            }
+        });
+    }
+</script>
+
+<%- include('partials/footer') %>
