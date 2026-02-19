@@ -29,6 +29,63 @@
         </div>
     </div>
 
+
+    <div class="card shadow border-info mb-4">
+        <div class="card-header bg-info text-white">
+            <h6 class="m-0"><i class="fa-regular fa-calendar-xmark me-2"></i>Resmi ve Kar Tatilleri</h6>
+        </div>
+        <div class="card-body bg-light">
+            <div class="row">
+                <div class="col-md-4 border-end">
+                    <form action="/admin/tatil-ekle" method="POST">
+                        <div class="mb-2">
+                            <label class="small fw-bold text-muted">Tarih Seçin</label>
+                            <input type="date" name="tarih" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small fw-bold text-muted">Açıklama</label>
+                            <input type="text" name="aciklama" class="form-control" placeholder="Örn: Kar Tatili" required>
+                        </div>
+                        <button type="submit" class="btn btn-info text-white fw-bold w-100 btn-sm">
+                            <i class="fa-solid fa-plus me-1"></i>Listeye Ekle
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="col-md-8">
+                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered bg-white mb-0 text-center align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Açıklama</th>
+                                    <th>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (typeof tatiller !== 'undefined' && tatiller.length > 0) { %>
+                                    <% tatiller.forEach(t => { %>
+                                        <tr>
+                                            <td class="fw-bold text-danger"><%= t.tarih %></td>
+                                            <td><%= t.aciklama %></td>
+                                            <td>
+                                                <a href="/admin/tatil-sil/<%= t.id %>" class="btn btn-sm btn-outline-danger border-0" onclick="return confirm('Silinsin mi?')">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    <% }) %>
+                                <% } else { %>
+                                    <tr><td colspan="3" class="text-muted small">Kayıtlı tatil yok.</td></tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         <div class="col-md-3">
             <div class="card shadow-sm border-primary h-100">

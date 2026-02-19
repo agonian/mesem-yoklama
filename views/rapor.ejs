@@ -1,43 +1,65 @@
 <%- include('partials/header') %>
 
 <div class="card shadow-sm border-success mb-4">
-        <div class="card-body bg-light d-flex align-items-center justify-content-between flex-wrap gap-3">
-            <div>
-                <h6 class="fw-bold text-success m-0"><i class="fa-solid fa-file-excel me-2"></i>Devamsızlık Çizelgesi İndir</h6>
-                <small class="text-muted">Seçili ay için otomatik + / - doldurulmuş Excel oluşturur.</small>
+        <div class="card-header bg-success text-white">
+            <h6 class="m-0"><i class="fa-solid fa-file-excel me-2"></i>Devamsızlık Çizelgeleri</h6>
+        </div>
+        <div class="card-body bg-light">
+            <div class="row g-4">
+                
+                <div class="col-md-6 border-end">
+                    <h6 class="fw-bold text-success mb-3"><i class="fa-solid fa-1 me-2"></i>Tekli İndir</h6>
+                    <form action="/rapor-indir" method="GET">
+                        <% let isletmeAdlari = [...new Set(raporlar.map(r => r.isletme))]; %>
+                        
+                        <div class="mb-2">
+                            <select name="isletmeAdi" class="form-select form-select-sm" required>
+                                <option value="">İşletme Seçiniz...</option>
+                                <% isletmeAdlari.forEach(ad => { %>
+                                    <option value="<%= ad %>"><%= ad %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+
+                        <div class="d-flex gap-2 mb-2">
+                            <select name="ay" class="form-select form-select-sm">
+                                <option value="2" selected>Şubat</option>
+                                <option value="3">Mart</option>
+                                <option value="4">Nisan</option>
+                                <option value="5">Mayıs</option>
+                                <option value="6">Haziran</option>
+                            </select>
+                            <select name="yil" class="form-select form-select-sm">
+                                <option value="2026" selected>2026</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-success w-100 fw-bold">Seçili Olanı İndir</button>
+                    </form>
+                </div>
+
+                <div class="col-md-6">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-list-ol me-2"></i>Toplu Liste (Tek Dosya)</h6>
+                    <form action="/rapor-indir-tek" method="GET">
+                        <div class="d-flex gap-2 mb-2">
+                            <select name="ay" class="form-select form-select-sm">
+                                <option value="2" selected>Şubat</option>
+                                <option value="3">Mart</option>
+                                <option value="4">Nisan</option>
+                                <option value="5">Mayıs</option>
+                                <option value="6">Haziran</option>
+                            </select>
+                            <select name="yil" class="form-select form-select-sm">
+                                <option value="2026" selected>2026</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-dark w-100 fw-bold">Tüm Listeyi İndir</button>
+                    </form>
+                    <div class="text-center mt-2">
+                         <small class="text-muted" style="font-size: 0.75rem;">* Alt alta sıralı, her sayfada 2 işletme.</small>
+                    </div>
+                </div>
+
             </div>
-            
-            <form action="/rapor-indir" method="GET" class="d-flex align-items-center gap-2">
-                <% 
-                   // Benzersiz işletme isimlerini bulalım
-                   let isletmeAdlari = [...new Set(raporlar.map(r => r.isletme))];
-                %>
-                <select name="isletmeAdi" class="form-select form-select-sm" required style="width: 200px;">
-                    <option value="">İşletme Seçiniz...</option>
-                    <% isletmeAdlari.forEach(ad => { %>
-                        <option value="<%= ad %>"><%= ad %></option>
-                    <% }) %>
-                </select>
-
-                <select name="ay" class="form-select form-select-sm" style="width: 70px;">
-                    <option value="1">Ocak</option>
-                    <option value="2" selected>Şubat</option>
-                    <option value="3">Mart</option>
-                    <option value="4">Nisan</option>
-                    <option value="5">Mayıs</option>
-                    <option value="6">Haziran</option>
-                    <option value="12">Aralık</option>
-                    </select>
-
-                <select name="yil" class="form-select form-select-sm" style="width: 80px;">
-                    <option value="2025">2025</option>
-                    <option value="2026" selected>2026</option>
-                </select>
-
-                <button type="submit" class="btn btn-success btn-sm fw-bold">
-                    <i class="fa-solid fa-download me-1"></i>İndir
-                </button>
-            </form>
         </div>
     </div>
 

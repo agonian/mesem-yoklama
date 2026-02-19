@@ -653,8 +653,41 @@ app.get('/admin', adminSorgusu, async (req, res) => {
             sifre: sifreler[u.email] || "Bilinmiyor (Eski)" // Şifreyi tabloya gönder
         }));
 
-        res.render('admin', { ogretmenler, msg: req.query.msg });
+        // 2. YENİ: Tatilleri Getir (Tarihe göre sıralı)
+        const tatilSnap = await db.collection('tatiller').orderBy('tarihSort', 'asc').get();
+        const tatiller = tatilSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        res.render('admin', { ogretmenler, tatiller, msg: req.query.msg });
+
     } catch (error) { res.send("Hata: " + error.message); }
+});
+
+// Yeni Tatil Ekleme
+app.post('/admin/tatil-ekle', adminSorgusu, async (req, res) => {
+    const { tarih, aciklama } = req.body; // YYYY-MM-DD gelir
+    try {
+        const [yil, ay, gun] = tarih.split('-');
+        const formatliTarih = `${gun}.${ay}.${yil}`; // DD.MM.YYYY
+
+        await db.collection('tatiller').add({
+            tarih: formatliTarih,       // Excel kontrolü için (18.02.2026)
+            tarihSort: tarih,           // Sıralama için (2026-02-18)
+            aciklama: aciklama
+        });
+        res.redirect('/admin?msg=Tatil günü eklendi.');
+    } catch (err) {
+        res.redirect('/admin?msg=Hata: ' + err.message);
+    }
+});
+
+// Tatil Silme
+app.get('/admin/tatil-sil/:id', adminSorgusu, async (req, res) => {
+    try {
+        await db.collection('tatiller').doc(req.params.id).delete();
+        res.redirect('/admin?msg=Tatil silindi.');
+    } catch (err) {
+        res.redirect('/admin?msg=Hata: ' + err.message);
+    }
 });
 
 // Manuel Öğretmen Ekleme
@@ -787,15 +820,19 @@ app.post('/admin/sifirla', adminSorgusu, async (req, res) => {
 
 
 // ==========================================
-// B. EXCEL İNDİRME (SİYAH RENK + FULL ARTI)
+// EXCEL İNDİRME MOTORU (TEKLİ VE TOPLU)
 // ==========================================
+
+// --- ROTA 1: TEKLİ EXCEL İNDİRME (GERİ GELDİ) ---
 app.get('/rapor-indir', async (req, res) => {
     const { isletmeAdi, ay, yil } = req.query;
-
     try {
-        console.log(`Excel isteği: ${isletmeAdi} - ${ay}/${yil}`);
+        console.log(`Tekli İndirme: ${isletmeAdi}`);
 
-        // 1. ÖĞRENCİLER
+        // 1. Verileri Çek
+        const tatilSnap = await db.collection('tatiller').get();
+        const TATILLER = tatilSnap.docs.map(doc => doc.data().tarih);
+
         const ogrSnap = await db.collection('ogrenciler')
             .where('ogretmenId', '==', req.uid)
             .where('isletmeAdi', '==', isletmeAdi)
@@ -804,91 +841,227 @@ app.get('/rapor-indir', async (req, res) => {
         let ogrenciler = ogrSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         ogrenciler.sort((a, b) => a.adSoyad.localeCompare(b.adSoyad));
 
-        // 2. YOKLAMALAR
         const arananAyStr = `.${String(ay).padStart(2, '0')}.${yil}`;
         const yoklamaSnap = await db.collection('yoklamalar')
             .where('ogretmenId', '==', req.uid)
             .where('isletme', '==', isletmeAdi)
             .get();
+        const oAyinYoklamalari = yoklamaSnap.docs.map(d => d.data()).filter(y => y.tarih.includes(arananAyStr));
 
-        const oAyinYoklamalari = yoklamaSnap.docs
-            .map(doc => doc.data())
-            .filter(y => y.tarih.includes(arananAyStr));
-
-        // 3. EXCEL HAZIRLIK
+        // 2. Excel Oluştur
         const workbook = new ExcelJS.Workbook();
         const sablonYolu = path.join(__dirname, 'public', 'sablon.xlsx');
         await workbook.xlsx.readFile(sablonYolu);
-        const worksheet = workbook.getWorksheet(1);
+        const sheet = workbook.getWorksheet(1);
 
-        worksheet.getCell('F5').value = isletmeAdi; 
-        worksheet.getCell('AG5').value = `${String(ay).padStart(2, '0')} / ${yil}`;
+        // Başlıklar
+        sheet.getCell('F5').value = isletmeAdi;
+        sheet.getCell('AG5').value = `${String(ay).padStart(2, '0')} / ${yil}`;
 
-        // 4. DOLDURMA
-        let satirNo = 9; 
-
+        // Öğrencileri Doldur
+        let satirNo = 9;
         ogrenciler.forEach((ogr, index) => {
-     
-            worksheet.getCell(`C${satirNo}`).value = ogr.adSoyad; 
+            if (index >= 20) return;
+            sheet.getCell(`C${satirNo}`).value = ogr.adSoyad;
             
             const daysInMonth = new Date(yil, ay, 0).getDate();
-
             for (let gun = 1; gun <= daysInMonth; gun++) {
-                let currentDate = new Date(yil, ay - 1, gun);
-                let dayOfWeek = currentDate.getDay(); // 0:Pazar, 6:Ctesi
-                
-                if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Haftasonunu geç
-
-                let colIndex = gun + 5; 
-                let cell = worksheet.getRow(satirNo).getCell(colIndex);
-
-                // --- YENİ BASİT MANTIK ---
                 let tamTarih = `${String(gun).padStart(2, '0')}.${String(ay).padStart(2, '0')}.${yil}`;
+                let colIndex = gun + 5;
+                let cell = sheet.getRow(satirNo).getCell(colIndex);
                 
-                // Bu tarihte özel bir kayıt (Yok, Raporlu, İzinli) var mı?
-                let oGunkuKayit = oAyinYoklamalari.find(y => y.tcNo === ogr.tcNo && y.tarih === tamTarih);
+                let dayOfWeek = new Date(yil, ay - 1, gun).getDay();
+                
+                if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+                if (TATILLER.includes(tamTarih)) continue;
 
-                if (oGunkuKayit) {
-                    // Kayıt varsa ne olduğuna bak
-                    if (oGunkuKayit.durum.includes('Devamsız') || oGunkuKayit.durum.includes('Yok')) {
-                        cell.value = "D";
-                    } else if (oGunkuKayit.durum.includes('İzinli')) {
-                        cell.value = "İ"; 
-                    } else if (oGunkuKayit.durum.includes('Raporlu')) {
-                         cell.value = "R";
-                    } else {
-                        // "Mevcut" girilmişse +
-                        cell.value = "+";
-                    }
+                let kayit = oAyinYoklamalari.find(y => y.tcNo === ogr.tcNo && y.tarih === tamTarih);
+                if (kayit) {
+                     if (kayit.durum.includes('Devamsız') || kayit.durum.includes('Yok')) cell.value = "D";
+                     else if (kayit.durum.includes('İzinli')) cell.value = "İ";
+                     else if (kayit.durum.includes('Raporlu')) cell.value = "R";
+                     else cell.value = "+";
                 } else {
-                    // HİÇ KAYIT YOKSA -> VAR KABUL ET (+)
-                    cell.value = "+"; 
+                    cell.value = "+";
                 }
-                
-                // --- ORTAK STİL (SİYAH & ORTALI) ---
                 cell.alignment = { horizontal: 'center' };
-                cell.font = { color: { argb: '00000000' } }; // SİYAH (Red iptal edildi)
             }
             satirNo++;
         });
 
-        // 5. GÖNDER
         const buffer = await workbook.xlsx.writeBuffer();
-        const guvenliDosyaAdi = encodeURIComponent(isletmeAdi) + "_Devamsizlik.xlsx";
-
+        const dosyaAdi = encodeURIComponent(isletmeAdi) + "_Devamsizlik.xlsx";
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${guvenliDosyaAdi}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi}"`);
         res.send(buffer);
 
     } catch (err) {
-        console.error("Excel Hatası:", err);
-        res.status(500).send(`<h3>Hata Oluştu</h3><p>${err.message}</p>`);
+        res.status(500).send("Hata: " + err.message);
     }
 });
 
 
+// ==========================================
+// ROTA 2: TEK DOSYADA TOPLU LİSTE (ALT ALTA - DÜZELTİLMİŞ)
+// ==========================================
+app.get('/rapor-indir-tek', async (req, res) => {
+    const { ay, yil } = req.query; 
+    try {
+        console.log(`Büyük Excel İsteği: ${ay}/${yil}`);
+        
+        // 1. VERİLERİ ÇEK
+        const tatilSnap = await db.collection('tatiller').get();
+        const TATILLER = tatilSnap.docs.map(doc => doc.data().tarih);
+
+        const ogrSnap = await db.collection('ogrenciler').where('ogretmenId', '==', req.uid).get();
+        if (ogrSnap.empty) return res.send("Öğrenci yok.");
+
+        // İşletme Gruplama
+        let isletmeGruplari = {};
+        ogrSnap.docs.forEach(doc => {
+            const d = doc.data();
+            let ad = d.isletmeAdi && d.isletmeAdi !== "-" ? d.isletmeAdi : "Tanımsız";
+            if (!isletmeGruplari[ad]) isletmeGruplari[ad] = [];
+            isletmeGruplari[ad].push({ ...d, id: doc.id });
+        });
+
+        // 2. EXCEL BAŞLAT
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(path.join(__dirname, 'public', 'sablon.xlsx'));
+        const sheet = workbook.getWorksheet(1);
+
+        // --- AYARLAR ---
+        const FORM_YUKSEKLIGI = 27; 
+        const SABLON_SON_SATIR = 26; // Kopyalanacak alanın bitişi
+        const isletmeAdlari = Object.keys(isletmeGruplari).sort();
+        
+        // Yoklamalar
+        const arananAyStr = `.${String(ay).padStart(2, '0')}.${yil}`;
+        const yoklamaSnap = await db.collection('yoklamalar').where('ogretmenId', '==', req.uid).get(); 
+        const tumYoklamalar = yoklamaSnap.docs.map(d => d.data()).filter(y => y.tarih.includes(arananAyStr));
+
+        const originalMerges = sheet.model.merges || [];
+
+        // --- DÖNGÜ ---
+        for (let i = 0; i < isletmeAdlari.length; i++) {
+            const isletmeAdi = isletmeAdlari[i];
+            const ogrenciler = isletmeGruplari[isletmeAdi];
+            const startRow = (i * FORM_YUKSEKLIGI) + 1;
+
+            // --- A. KOPYALAMA İŞLEMİ (2. ve sonraki formlar için) ---
+            if (i > 0) {
+                for (let r = 1; r <= SABLON_SON_SATIR; r++) {
+                    const srcRow = sheet.getRow(r);
+                    const destRow = sheet.getRow(startRow + r - 1);
+                    destRow.height = srcRow.height;
+
+                    srcRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
+                        const destCell = destRow.getCell(colNum);
+                        destCell.value = cell.value;
+                        destCell.style = JSON.parse(JSON.stringify(cell.style)); // Derin kopya
+                    });
+                }
+
+                // Merge Kopyala
+                originalMerges.forEach(range => {
+                    const [start, end] = range.split(':');
+                    const startCell = sheet.getCell(start);
+                    const endCell = sheet.getCell(end);
+                    
+                    if (startCell.row <= SABLON_SON_SATIR) {
+                        const newTop = parseInt(startCell.row) + startRow - 1;
+                        const newBottom = parseInt(endCell.row) + startRow - 1;
+                        const left = parseInt(startCell.col);
+                        const right = parseInt(endCell.col);
+                        sheet.mergeCells(newTop, left, newBottom, right);
+                    }
+                });
+            }
+
+            // --- B. TEMİZLİK (Hayalet İsimleri Silme) ---
+            // Her formda öğrenci listesi 9. satırdan başlar ve yaklaşık 20-25 satır sürer.
+            // Bu alanı temizlemezsek, önceki formdan kopyalanan isimler kalır.
+            const rowOffset = startRow - 1;
+            for(let k = 9; k < 19; k++) { // 9. satırdan 30. satıra kadar temizle
+                 // C sütunu (İsim), B sütunu (No) ve Günler (F'den AJ'ye)
+                 sheet.getCell(k + rowOffset, 3).value = null; // C Sütunu (İsim) temizle
+                 // Günleri de temizleyelim (F=6'dan AJ=36'ya kadar)
+                 for(let g=6; g<=38; g++) sheet.getCell(k + rowOffset, g).value = null;
+            }
 
 
+            // --- D. VERİ DOLDURMA ---
+            
+            // 1. İşletme Adı (F5)
+            sheet.getCell(5 + rowOffset, 6).value = isletmeAdi; 
+            
+            // 2. Tarih (AG5)
+            sheet.getCell(5 + rowOffset, 33).value = `${String(ay).padStart(2, '0')} / ${yil}`;
+
+            // 3. İşletme Yetkilisi (Yeşil Alan - Sol Alt Köşe)
+            // Görsele göre "İşletme Yetkilisi" başlığının altındaki boşluk.
+            // Tahmini: C29 veya C30 hücresi. (İmza Kaşe yazısının üstü)
+            // İlk öğrenciden Usta Öğretici bilgisini alalım.
+            const ustaAdi = ogrenciler[0].ustaOgretici || "Yetkili";
+            
+            // Buradaki hücre adresini şablonuna göre deneme yanılma yapabilirsin.
+            // Görselde "Adı Soyadı" yazan yerin sağı veya üstü.
+            // Tahmini: C30 (Adı Soyadı yazan satırın karşılığı)
+            // Senin şablonunda "İşletme Yetkilisi" (Sol alt kutu) altında "Adı Soyadı" yazan yerin hemen üstü veya yanı.
+            // Ben C30'a yazdırıyorum, şablonda kayarsa C29 veya C31 dene.
+            sheet.getCell(23 + rowOffset, 3).value = ustaAdi; 
+
+
+            // 4. Öğrencileri Doldur (9. Satırdan başlar)
+            let ogrSatir = 9 + rowOffset;
+            ogrenciler.forEach((ogr, index) => {
+                if (index >= 20) return; 
+                sheet.getCell(ogrSatir, 3).value = ogr.adSoyad;
+
+                const daysInMonth = new Date(yil, ay, 0).getDate();
+                for (let gun = 1; gun <= daysInMonth; gun++) {
+                    let colIndex = gun + 5; 
+                    let cell = sheet.getRow(ogrSatir).getCell(colIndex);
+                    let tamTarih = `${String(gun).padStart(2, '0')}.${String(ay).padStart(2, '0')}.${yil}`;
+                    let dayOfWeek = new Date(yil, ay - 1, gun).getDay();
+
+                    // Hücreyi temizle (Kenarlık kalsın, içerik gitsin) - Yukarıda yaptık ama garanti olsun
+                    cell.value = null;
+
+                    if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+                    if (TATILLER.includes(tamTarih)) continue;
+
+                    let kayit = tumYoklamalar.find(y => y.isletme === isletmeAdi && y.tcNo === ogr.tcNo && y.tarih === tamTarih);
+                    if (kayit) {
+                        if (kayit.durum.includes('Devamsız') || kayit.durum.includes('Yok')) cell.value = "D";
+                        else if (kayit.durum.includes('İzinli')) cell.value = "İ";
+                        else if (kayit.durum.includes('Raporlu')) cell.value = "R";
+                        else cell.value = "+";
+                    } else {
+                        cell.value = "+";
+                    }
+                    cell.alignment = { horizontal: 'center' };
+                }
+                ogrSatir++;
+            });
+
+            // Sayfa Sonu
+            if (i % 2 === 1) {
+                 sheet.getRow(startRow + FORM_YUKSEKLIGI - 1).addPageBreak();
+            }
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const dosyaAdi = encodeURIComponent(`Tum_Isletmeler_${ay}-${yil}`) + ".xlsx";
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi}"`);
+        res.send(buffer);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Hata: " + err.message);
+    }
+});
 
 
 
